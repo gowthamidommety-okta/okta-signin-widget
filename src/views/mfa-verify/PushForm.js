@@ -15,17 +15,45 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
   var _ = Okta._;
   // deviceName is escaped on BaseForm (see BaseForm's template)
   var titleTpl = Okta.Handlebars.compile('{{factorName}} ({{{deviceName}}})');
+  var subtitleTpl = Okta.Handlebars.compile('({{subtitle}})');
   var WARNING_TIMEOUT = 30000; //milliseconds
   var warningTemplate = '<div class="okta-form-infobox-warning infobox infobox-warning">\
                            <span class="icon warning-16"></span>\
                            <p>{{warning}}</p>\
                          </div>';
+  function getFormAndButtonDetails(factorType) {
+    switch(factorType) {
+    case 'push':
+      return {
+        send: Okta.loc('oktaverify.send', 'login'),
+        resend: Okta.loc('oktaverify.resend', 'login'),
+        sent: Okta.loc('oktaverify.sent', 'login'),
+        timeout: Okta.loc('oktaverify.timeout', 'login'),
+        title: titleTpl({factorName: this.model.get('factorLabel'), deviceName: this.model.get('deviceName')}),
+      };
+    case 'call':
+      return {
+        send: 'Call',
+        resend: 'Redial',
+        sent: 'Calling',
+        timeout: 'Your call has expired',
+        title: this.model.get('factorLabel'),
+        subtitle: subtitleTpl({ subtitle: this.model.get('phoneNumber') }),
+      };
+    default:
+      return {
+        send: '',
+        resend: '',
+        sent: '',
+        timeout: '',
+      };
+    }
+  }
 
   return Okta.Form.extend({
     className: 'mfa-verify-push',
     autoSave: true,
     noCancelButton: true,
-    save: _.partial(Okta.loc, 'oktaverify.send', 'login'),
     scrollOnError: false,
     layout: 'o-form-theme',
     attributes: { 'data-se': 'factor-push' },
@@ -35,6 +63,12 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
 
     initialize: function () {
       this.enabled = true;
+      var factorType = this.model.get('factorType');
+      this.formAndButtonDetails = getFormAndButtonDetails.call(this, factorType);
+      this.save = this.formAndButtonDetails.send;
+      if(this.formAndButtonDetails.subtitle) {
+        this.subtitle = this.formAndButtonDetails.subtitle;
+      }
       this.listenTo(this.options.appState, 'change:isMfaRejectedByUser',
         function (state, isMfaRejectedByUser) {
           this.setSubmitState(isMfaRejectedByUser);
@@ -47,7 +81,7 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
         function (state, isMfaTimeout) {
           this.setSubmitState(isMfaTimeout);
           if (isMfaTimeout) {
-            this.showError(Okta.loc('oktaverify.timeout', 'login'));
+            this.showError(this.formAndButtonDetails.timeout);
           }
         }
       );
@@ -59,21 +93,19 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
           }
         }
       );
-      this.title = titleTpl({
-        factorName: this.model.get('factorLabel'),
-        deviceName: this.model.get('deviceName')
-      });
+      this.title = this.formAndButtonDetails.title;
     },
-    setSubmitState: function (ableToSubmit) {
+    setSubmitState: function (ableToSubmit, buttonValue) {
       var button = this.$el.find('.button');
       this.enabled = ableToSubmit;
       if (ableToSubmit) {
+        var buttonValue = buttonValue || this.formAndButtonDetails.send;
         button.removeClass('link-button-disabled');
-        button.prop('value', Okta.loc('oktaverify.send', 'login'));
+        button.prop('value', buttonValue);
         button.prop('disabled', false);
       } else {
         button.addClass('link-button-disabled');
-        button.prop('value', Okta.loc('oktaverify.sent', 'login'));
+        button.prop('value', this.formAndButtonDetails.sent);
         button.prop('disabled', true);
       }
     },
@@ -94,18 +126,31 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
       }
     },
     doSave: function () {
-      var warningTimeout;
+      var timeout;
       this.clearErrors();
       this.clearWarnings();
-      if (this.model.isValid()) {
+      if (this.model.get('factorType') == 'push') {
+        if(this.model.isValid()) {
+          this.listenToOnce(this.model, 'error', function() {
+            this.setSubmitState(true);
+            this.clearWarnings();
+            clearTimeout(timeout);
+          });
+          this.trigger('save', this.model);
+          timeout = Util.callAfterTimeout(_.bind(function() {
+            this.showWarning(Okta.loc('oktaverify.warning', 'login'));
+          }, this), WARNING_TIMEOUT);
+        }
+      }
+      else if (this.model.get('factorType') == 'call') {
         this.listenToOnce(this.model, 'error', function() {
           this.setSubmitState(true);
           this.clearWarnings();
-          clearTimeout(warningTimeout);
+          clearTimeout(timeout);
         });
         this.trigger('save', this.model);
-        warningTimeout = Util.callAfterTimeout(_.bind(function() {
-          this.showWarning(Okta.loc('oktaverify.warning', 'login'));
+        timeout = Util.callAfterTimeout(_.bind(function() {
+          this.setSubmitState(true, this.formAndButtonDetails.resend);
         }, this), WARNING_TIMEOUT);
       }
     },

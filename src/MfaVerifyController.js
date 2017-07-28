@@ -41,9 +41,11 @@ function (Okta, Checkbox, BaseLoginController, CookieUtil, TOTPForm, YubikeyForm
         View = SecurityQuestionForm;
         break;
       case 'sms':
-      case 'call':
       case 'email':
         View = PassCodeForm;
+        break;
+      case 'call':
+        View = this.settings.get('features.phoneCallPush') ? PushForm : PassCodeForm;
         break;
       case 'token':
       case 'token:software:totp':

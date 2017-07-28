@@ -78,6 +78,7 @@ function (Okta, Q, Errors, BrowserFeatures, Util, Logger, OAuth2Util, config) {
       'features.hideSignOutLinkInMFA' : ['boolean', false, false],
       'features.customExpiredPassword': ['boolean', true, false],
       'features.registration': ['boolean', false, false],
+      'features.phoneCallPush': ['boolean', false, false],
 
       // I18N
       'language': ['any', false], // Can be a string or a function
