@@ -33,9 +33,9 @@ define(['okta', 'util/CookieUtil', 'util/Util'], function (Okta, CookieUtil, Uti
       };
     case 'call':
       return {
-        send: 'Call',
-        resend: 'Redial',
-        sent: 'Calling',
+        send: Okta.loc('mfa.call', 'login'),
+        resend: Okta.loc('mfa.redial', 'login'),
+        sent: Okta.loc('mfa.calling', 'login'),
         timeout: 'Your call has expired',
         title: this.model.get('factorLabel'),
         subtitle: subtitleTpl({ subtitle: this.model.get('phoneNumber') }),

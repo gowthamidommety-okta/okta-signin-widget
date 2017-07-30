@@ -23,6 +23,7 @@ define([
   'EnrollQuestionController',
   'EnrollWindowsHelloController',
   'EnrollCallAndSmsController',
+  'EnrollVoiceCallPushController',
   'EnrollOnPremController',
   'EnrollSymantecVipController',
   'EnrollYubikeyController',
@@ -63,6 +64,7 @@ function (BaseLoginRouter,
           EnrollQuestionController,
           EnrollWindowsHelloController,
           EnrollCallAndSmsController,
+          EnrollVoiceCallPushController,
           EnrollOnPremController,
           EnrollSymantecVipController,
           EnrollYubikeyController,
@@ -211,11 +213,20 @@ function (BaseLoginRouter,
     },
 
     enrollCall: function () {
-      this.render(EnrollCallAndSmsController, {
-        provider: 'OKTA',
-        factorType: 'call',
-        Beacon: FactorBeacon
-      });
+      if(this.settings.get('features.phoneCallPush')) {
+        this.render(EnrollVoiceCallPushController, {
+          provider: 'OKTA',
+          factorType: 'call',
+          Beacon: FactorBeacon
+        });
+      }
+      else {
+        this.render(EnrollCallAndSmsController, {
+          provider: 'OKTA',
+          factorType: 'call',
+          Beacon: FactorBeacon
+        });
+      }
     },
 
     enrollRsa: function () {

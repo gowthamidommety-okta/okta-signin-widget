@@ -9,7 +9,7 @@
  *
  * See the License for the specific language governing permissions and limitations under the License.
  */
-/* eslint complexity: [2, 8] */
+
 define([
   'okta',
   'BaseCallAndSmsController',
@@ -23,43 +23,29 @@ define([
 function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, CountryUtil, FormType, Keys) {
 
   var _ = Okta._;
-  var API_RATE_LIMIT = 30000; //milliseconds
 
-  var factorIdIsDefined = {
-    factorId: function (val) {
-      return !_.isUndefined(val);
-    }
-  };
+  var PUSH_INTERVAL = 6000;
+  var API_RATE_LIMIT = 30000;
 
-  function isCallFactor(factorType) {
-    return factorType === 'call';
-  }
-
-  function getClassName(factorType) {
-    return isCallFactor(factorType) ? 'enroll-call' : 'enroll-sms';
-  }
-
-  function sendCode(e) {
+  function sendPush(e) {
     if (Keys.isEnter(e)) {
       e.stopPropagation();
       e.preventDefault();
       if (e.type === 'keyup' && e.data && e.data.model) {
-        e.data.model.sendCode();
+        e.data.model.sendPush();
       }
     }
   }
 
   return BaseCallAndSmsController.extend({
-    className: function () {
-      return getClassName(this.options.factorType);
-    },
+    className: 'enroll-call',
     setModel: function() {
       _.extend(this.model, {
         limitResending: function () {
           this.set({ableToResend: false});
           _.delay(_.bind(this.set, this), API_RATE_LIMIT, {ableToResend: true});
         },
-        sendCode: function () {
+        sendPush: function () {
           var self = this;
           var phoneNumber = this.get('fullPhoneNumber');
           var phoneExtension = this.get('phoneExtension');
@@ -75,11 +61,9 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
             var isMfaEnroll = transaction.status === 'MFA_ENROLL';
             var profileData = {
               phoneNumber: phoneNumber,
-              updatePhone: isMfaEnroll ? self.get('hasExistingPhones') : true
+              updatePhone: isMfaEnroll ? self.get('hasExistingPhones') : true,
+              phoneExtension: phoneExtension
             };
-            if (isCallFactor(self.get('factorType'))) {
-              profileData['phoneExtension'] = phoneExtension;
-            }
 
             if (self.get('skipPhoneValidation')) {
               profileData['validatePhone'] = false;
@@ -92,6 +76,11 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
               });
               return factor.enroll({
                 profile: profileData
+              })
+              .then(function (trans) {
+                self.set('lastEnrolledPhoneNumber', phoneNumber);
+                self.limitResending();
+                return trans.poll(PUSH_INTERVAL);
               })
               .fail(function (error) {
                 if(error.errorCode === 'E0000098') { // E0000098: "This phone number is invalid."
@@ -118,10 +107,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
           // Rethrow errors so we can change state
           // AFTER setting the new transaction
           }, true)
-          .then(function () {
-            self.set('lastEnrolledPhoneNumber', phoneNumber);
-            self.limitResending();
-          })
           .fail(function () {
             self.set('ableToResend', true);
             self.set('trapEnrollment', false);
@@ -133,28 +118,20 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
           return this.doTransaction(function(transaction) {
             return transaction.resend(this.get('factorType'));
           });
-        },
-        save: function () {
-          return this.doTransaction(function(transaction) {
-            return transaction.activate({
-              passCode: this.get('passCode')
-            });
-          });
         }
       });
     },
 
     Form: function () {
       var factorType = this.options.factorType;
-      var isCall = isCallFactor(factorType);
 
-      var formTitle = Okta.loc(isCall ? 'enroll.call.setup' : 'enroll.sms.setup', 'login');
-      var formSubmit = Okta.loc(isCall ? 'mfa.call' : 'mfa.sendCode', 'login');
-      var formRetry = Okta.loc(isCall ? 'mfa.redial' : 'mfa.resendCode', 'login');
-      var formSubmitted = Okta.loc(isCall ? 'mfa.calling' : 'mfa.sent', 'login');
+      var formTitle = 'Voice Call Push';
+      var formSubmit = Okta.loc('mfa.call', 'login');
+      var formRetry = Okta.loc('mfa.redial', 'login');
+      var formSubmitted = Okta.loc('mfa.calling', 'login');
 
-      var numberFieldClassName = isCall ? 'enroll-call-phone' : 'enroll-sms-phone';
-      var buttonClassName = isCall ? 'call-request-button' : 'sms-request-button';
+      var numberFieldClassName = 'enroll-call-phone';
+      var buttonClassName = 'call-request-button';
 
       var formChildren = [
         FormType.Input({
@@ -171,28 +148,26 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
           type: 'text',
           render: function () {
             this.$('input[name="phoneNumber"]')
-              .off('keydown keyup', sendCode)
-              .keydown(sendCode)
-              .keyup({model: this.model}, sendCode);
+              .off('keydown keyup', sendPush)
+              .keydown(sendPush)
+              .keyup({model: this.model}, sendPush);
           }
         })
       ];
-      if (isCall) {
-        formChildren.push(FormType.Input({
-          placeholder: Okta.loc('mfa.phoneNumber.ext.placeholder', 'login'),
-          className: 'enroll-call-extension',
-          name: 'phoneExtension',
-          input: TextBox,
-          type: 'text'
-        }));
-      }
+      formChildren.push(FormType.Input({
+        placeholder: Okta.loc('mfa.phoneNumber.ext.placeholder', 'login'),
+        className: 'enroll-call-extension',
+        name: 'phoneExtension',
+        input: TextBox,
+        type: 'text'
+      }));
       formChildren.push(
         FormType.Button({
           title: formSubmit,
           attributes: { 'data-se': buttonClassName },
           className: 'button button-primary js-enroll-phone ' + buttonClassName,
           click: function () {
-            this.model.sendCode();
+            this.model.sendPush();
           }
         }),
         FormType.Button({
@@ -215,24 +190,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
               this.render();
             });
           }
-        }),
-        FormType.Divider({
-          showWhen: factorIdIsDefined
-        }),
-        FormType.Input({
-          placeholder: Okta.loc('mfa.challenge.enterCode.placeholder', 'login'),
-          name: 'passCode',
-          input: TextBox,
-          type: 'number',
-          params: {
-            innerTooltip: Okta.loc('mfa.challenge.enterCode.tooltip', 'login')
-          },
-          showWhen: factorIdIsDefined
-        }),
-        FormType.Toolbar({
-          noCancelButton: true,
-          save: Okta.loc('mfa.challenge.verify', 'login'),
-          showWhen: factorIdIsDefined
         })
       );
 
@@ -240,7 +197,7 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
         title: formTitle,
         noButtonBar: true,
         autoSave: true,
-        className: getClassName(factorType),
+        className: 'enroll-call',
         initialize: function () {
           this.listenTo(this.model, 'error errors:clear', function () {
             this.clearErrors();
@@ -253,11 +210,11 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
       };
     },
 
+    Footer: Footer,
+
     initialize: function () {
       this.setModel();
       this.setProperties();
     }
-
   });
-
 });
