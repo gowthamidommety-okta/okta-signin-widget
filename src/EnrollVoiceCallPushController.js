@@ -112,7 +112,7 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
     Form: function () {
       var factorType = this.options.factorType;
 
-      var formTitle = 'Voice Call Push';
+      var formTitle = Okta.loc('enroll.call.setup', 'login');
       var formSubmit = Okta.loc('mfa.call', 'login');
       var formRetry = Okta.loc('mfa.redial', 'login');
       var formSubmitted = Okta.loc('mfa.calling', 'login');
@@ -202,6 +202,26 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
     initialize: function () {
       this.setModel();
       this.setProperties();
+      this.listenTo(this.options.appState, 'change:isMfaRejectedByUser',
+        function (state, isMfaRejectedByUser) {
+          this.model.set('ableToResend', true);
+          if (isMfaRejectedByUser) {
+            this.model.trigger('error', this.model, 
+              {responseJSON: {errorSummary: Okta.loc('oktaverify.rejected', 'login')}}
+            );
+          }
+        }
+      );
+      this.listenTo(this.options.appState, 'change:isMfaTimeout',
+        function (state, isMfaTimeout) {
+          this.model.set('ableToResend', true);
+          if (isMfaTimeout) {
+            this.model.trigger('error', this.model, 
+              {responseJSON: {errorSummary: 'Your call has expired' }}
+            );
+          }
+        }
+      );
     }
   });
 });
