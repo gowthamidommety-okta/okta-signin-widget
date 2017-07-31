@@ -23,7 +23,6 @@ define([
 function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, CountryUtil, FormType, Keys) {
 
   var _ = Okta._;
-  var API_RATE_LIMIT = 30000; //milliseconds
 
   var factorIdIsDefined = {
     factorId: function (val) {
@@ -55,10 +54,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
     },
     setModel: function() {
       _.extend(this.model, {
-        limitResending: function () {
-          this.set({ableToResend: false});
-          _.delay(_.bind(this.set, this), API_RATE_LIMIT, {ableToResend: true});
-        },
         sendCode: function () {
           var self = this;
           var phoneNumber = this.get('fullPhoneNumber');
@@ -125,13 +120,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
           .fail(function () {
             self.set('ableToResend', true);
             self.set('trapEnrollment', false);
-          });
-        },
-        resendCode: function () {
-          this.trigger('errors:clear');
-          this.limitResending();
-          return this.doTransaction(function(transaction) {
-            return transaction.resend(this.get('factorType'));
           });
         },
         save: function () {

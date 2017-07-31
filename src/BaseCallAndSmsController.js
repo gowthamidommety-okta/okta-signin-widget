@@ -23,6 +23,7 @@ define([
 function (Okta, FormController, Footer, PhoneTextBox, TextBox, CountryUtil, FormType, Keys) {
 
   var _ = Okta._;
+  var API_RATE_LIMIT = 30000;
 
   return FormController.extend({
     Model: {
@@ -60,6 +61,17 @@ function (Okta, FormController, Footer, PhoneTextBox, TextBox, CountryUtil, Form
             return lastEnrolled === current;
           }
         }
+      },
+      limitResending: function () {
+        this.set({ableToResend: false});
+        _.delay(_.bind(this.set, this), API_RATE_LIMIT, {ableToResend: true});
+      },
+      resendCode: function () {
+        this.trigger('errors:clear');
+        this.limitResending();
+        return this.doTransaction(function(transaction) {
+          return transaction.resend(this.get('factorType'));
+        });
       }
     },
 

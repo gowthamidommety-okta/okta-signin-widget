@@ -23,9 +23,7 @@ define([
 function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, CountryUtil, FormType, Keys) {
 
   var _ = Okta._;
-
   var PUSH_INTERVAL = 6000;
-  var API_RATE_LIMIT = 30000;
 
   function sendPush(e) {
     if (Keys.isEnter(e)) {
@@ -41,10 +39,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
     className: 'enroll-call',
     setModel: function() {
       _.extend(this.model, {
-        limitResending: function () {
-          this.set({ableToResend: false});
-          _.delay(_.bind(this.set, this), API_RATE_LIMIT, {ableToResend: true});
-        },
         sendPush: function () {
           var self = this;
           var phoneNumber = this.get('fullPhoneNumber');
@@ -110,13 +104,6 @@ function (Okta, BaseCallAndSmsController, Footer, PhoneTextBox, TextBox, Country
           .fail(function () {
             self.set('ableToResend', true);
             self.set('trapEnrollment', false);
-          });
-        },
-        resendCode: function () {
-          this.trigger('errors:clear');
-          this.limitResending();
-          return this.doTransaction(function(transaction) {
-            return transaction.resend(this.get('factorType'));
           });
         }
       });
