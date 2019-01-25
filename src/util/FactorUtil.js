@@ -123,7 +123,13 @@ function (Okta, TimeUtil) {
       description: 'factor.customFactor.description',
       iconClassName: 'mfa-custom-factor',
       sortOrder: 16
-    }
+    },
+    'WEBAUTHN': {
+      label: 'Webauthn Authenticator',
+      description: 'Use a Webauthn Authenticator to sign on to Okta',
+      iconClassName: 'mfa-u2f',
+      sortOrder: 17
+    },
   };
 
   fn.getFactorName = function (provider, factorType) {
@@ -161,11 +167,12 @@ function (Okta, TimeUtil) {
       return 'QUESTION';
     }
     if (provider === 'FIDO' && factorType === 'webauthn') {
-      if (this.settings.get('features.webauthn')) {
-        return 'U2F';
-      } else {
-        return 'WINDOWS_HELLO';
-      }
+      // if (this.settings.get('features.webauthn')) {
+      //   return 'U2F';
+      // } else {
+      //   return 'WINDOWS_HELLO';
+      // }
+      return 'WEBAUTHN';
     }
     if (provider === 'FIDO' && factorType === 'u2f') {
       return 'U2F';
@@ -190,11 +197,17 @@ function (Okta, TimeUtil) {
 
   fn.getFactorLabel = function (provider, factorType) {
     var key = factorData[fn.getFactorName.apply(this, [provider, factorType])].label;
+    if (factorType === 'webauthn') {
+      return key;
+    }
     return Okta.loc(key, 'login');
   };
 
   fn.getFactorDescription = function (provider, factorType) {
     var key = factorData[fn.getFactorName.apply(this, [provider, factorType])].description;
+    if (factorType === 'webauthn') {
+      return key;
+    }
     return Okta.loc(key, 'login');
   };
 

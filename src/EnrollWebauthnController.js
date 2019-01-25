@@ -35,6 +35,10 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
         '__enrolled__': 'boolean'
       },
 
+      props: {
+        authenticatorAttachment: ['string', true]
+      },
+
       save: function () {
         this.trigger('request');
 
@@ -54,10 +58,14 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
       activate: function () {
         this.set('__enrolled__', true);
         this.trigger('errors:clear');
+        var self = this;
 
         return this.doTransaction(function (transaction) {
           // enroll via browser webauthn js
           var activation = transaction.factor.activation;
+          var authenticatorAttachment = this.get('authenticatorAttachment');
+          activation.authenticatorSelection.authenticatorAttachment = authenticatorAttachment;
+          var osType = (authenticatorAttachment === 'platform') ? 'platform' : null;
           if (webauthn.isNewApiAvailable()) {
             var options = _.extend({}, activation, {
               challenge: CryptoUtil.strToBin(activation.challenge),
@@ -71,7 +79,8 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
               .then(function (newCredential) {
                 return transaction.activate({
                   attestation: CryptoUtil.binToStr(newCredential.response.attestationObject),
-                  clientData: CryptoUtil.binToStr(newCredential.response.clientDataJSON)
+                  clientData: CryptoUtil.binToStr(newCredential.response.clientDataJSON),
+                  osType: osType
                 });
               })
               .fail(function (error) {
@@ -113,15 +122,12 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
     },
 
     Form: {
-      title: _.partial(Okta.loc, 'enroll.u2f.title', 'login'),
-      save: _.partial(Okta.loc, 'enroll.u2f.save', 'login'),
+      title: 'Setup a Webauthn Authenticator',
       noCancelButton: true,
       hasSavingState: false,
-      autoSave: true,
+      autoSave: false,
       className: 'enroll-webauthn-form',
-      noButtonBar: function () {
-        return !webauthn.isWebauthnOrU2fAvailable();
-      },
+      noButtonBar: true,
       modelEvents: {
         'request': '_startEnrollment',
         'error': '_stopEnrollment'
@@ -130,16 +136,28 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
         var children = [];
 
         if (webauthn.isWebauthnOrU2fAvailable()) {
+          children.push(FormType.Button({
+            attributes: { 'data-se': 'cross-platform'},
+            className: 'button button-primary button-wide webauthn-button cross-platform',
+            title: 'Register U2F key',
+            click: function () {
+              this.model.set('authenticatorAttachment', 'cross-platform');
+              this.model.save();
+            }
+          }));
+          children.push(FormType.Button({
+            attributes: { 'data-se': 'platform'},
+            className: 'button button-primary button-wide webauthn-button platform',
+            title: 'Register Platform Authenticator',
+            click: function () {
+              this.model.set('authenticatorAttachment', 'platform');
+              this.model.save();
+            }
+          }));
           //There is html in enroll.u2f.general2 in our properties file, reason why is unescaped
           children.push(FormType.View({
             View:
-              '<div class="u2f-instructions">\
-                 <ol>\
-                   <li>{{{i18n code="enroll.u2f.general2" bundle="login"}}}</li>\
-                   <li>{{i18n code="enroll.u2f.general3" bundle="login"}}</li>\
-                 </ol>\
-               </div>\
-               <div class="u2f-enroll-text hide">\
+              '<div class="u2f-enroll-text hide">\
                  <p>{{i18n code="enroll.u2f.instructions" bundle="login"}}</p>\
                  <p>{{i18n code="enroll.u2f.instructionsBluetooth" bundle="login"}}</p>\
                  <div data-se="u2f-devices" class="u2f-devices-images">\
@@ -147,7 +165,11 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
                    <div class="u2f-bluetooth"></div>\
                  </div>\
                  <div data-se="u2f-waiting" class="okta-waiting-spinner"></div>\
-               </div>'
+               </div>\
+               <div class="platform-enroll-text hide">\
+                  <p>Enroll using your Platform Authenticator</p>\
+                  <div data-se="u2f-waiting" class="okta-waiting-spinner"></div>\
+                </div>'
           }));
         } else {
           var errorMessageKey = 'u2f.error.factorNotSupported';
@@ -164,15 +186,24 @@ function (Okta, Errors, FormType, FormController, CryptoUtil, FidoUtil, webauthn
       },
 
       _startEnrollment: function () {
-        this.$('.u2f-instructions').hide();
-        this.$('.u2f-enroll-text').show();
-        this.$('.o-form-button-bar').hide();
+        //this.$('.u2f-instructions').hide();
+        var authenticatorAttachment = this.model.get('authenticatorAttachment');
+        if (authenticatorAttachment == 'cross-platform') {
+          this.$('.u2f-enroll-text').show();
+        }
+        else {
+          this.$('.platform-enroll-text').show();
+        }
+        //this.$('.o-form-button-bar').hide();
+        this.$('.webauthn-button').hide();
       },
 
       _stopEnrollment: function () {
-        this.$('.u2f-instructions').show();
+        //this.$('.u2f-instructions').show();
         this.$('.u2f-enroll-text').hide();
-        this.$('.o-form-button-bar').show();
+        this.$('.platform-enroll-text').hide();
+        //this.$('.o-form-button-bar').show();
+        this.$('.webauthn-button').show();
       }
     },
 
