@@ -120,79 +120,100 @@ function (Okta, Errors, FormController, FormType, CryptoUtil, FidoUtil,
       }
     },
 
-    Form: {
-      autoSave: true,
-      hasSavingState: false,
-      title: _.partial(Okta.loc, 'factor.u2f', 'login'),
-      className: 'verify-webauthn-form',
-      noCancelButton: true,
-      save: _.partial(Okta.loc, 'verify.u2f.retry', 'login'),
-      noButtonBar: function () {
-        return !webauthn.isWebauthnOrU2fAvailable();
-      },
-      modelEvents: {
-        'request': '_startEnrollment',
-        'error': '_stopEnrollment'
-      },
+    Form: function () {
+      var factors = this.options.appState.get('factors');
+      var factor = factors.findWhere({
+        factorType: 'webauthn',
+        provider: 'FIDO'
+      });
+      var factorProfile = factor.get('profile');
+      var isPlatform = factorProfile && factorProfile.osType;
+      var title = isPlatform ? 'Platform Authenticator' : 'Security Key (U2F)';
+      return {
+        autoSave: true,
+        hasSavingState: false,
+        title: title,
+        className: 'verify-webauthn-form',
+        noCancelButton: true,
+        save: 'Retry',
+        noButtonBar: function () {
+          return !webauthn.isWebauthnOrU2fAvailable();
+        },
+        modelEvents: {
+          'request': '_startEnrollment',
+          'error': '_stopEnrollment'
+        },
 
-      formChildren: function () {
-        var children = [];
+        formChildren: function () {
+          var children = [];
 
-        if (webauthn.isWebauthnOrU2fAvailable()) {
-          children.push(FormType.View({
-            View: '\
-            <div class="u2f-verify-text">\
-              <p>{{i18n code="verify.u2f.instructions" bundle="login"}}</p>\
-              <p>{{i18n code="verify.u2f.instructionsBluetooth" bundle="login"}}</p>\
-              <div data-se="u2f-waiting" class="okta-waiting-spinner"></div>\
-            </div>'
-          }));
-        }
-        else {
-          var errorMessageKey = 'u2f.error.factorNotSupported';
-          if (this.options.appState.get('factors').length === 1) {
-            errorMessageKey = 'u2f.error.factorNotSupported.oneFactor';
-          }
-          children.push(FormType.View(
-            {View: new HtmlErrorMessageView({message: Okta.loc(errorMessageKey, 'login')})},
-            {selector: '.o-form-error-container'}
-          ));
-        }
-
-        if (this.options.appState.get('allowRememberDevice')) {
-          children.push(FormType.Input({
-            label: false,
-            'label-top': true,
-            placeholder: this.options.appState.get('rememberDeviceLabel'),
-            className: 'margin-btm-0',
-            name: 'rememberDevice',
-            type: 'checkbox'
-          }));
-        }
-
-        return children;
-      },
-
-      postRender: function () {
-        _.defer(_.bind(function () {
           if (webauthn.isWebauthnOrU2fAvailable()) {
-            this.model.save();
+            if (isPlatform) {
+              children.push(FormType.View({
+                View: '\
+                <div class="u2f-verify-text">\
+                  <p>Please verify using your Platform Authenticator</p>\
+                  <div data-se="u2f-waiting" class="okta-waiting-spinner"></div>\
+                </div>'
+              }));
+            }
+            else {
+              children.push(FormType.View({
+                View: '\
+                <div class="u2f-verify-text">\
+                  <p>{{i18n code="verify.u2f.instructions" bundle="login"}}</p>\
+                  <p>{{i18n code="verify.u2f.instructionsBluetooth" bundle="login"}}</p>\
+                  <div data-se="u2f-waiting" class="okta-waiting-spinner"></div>\
+                </div>'
+              }));
+            }
           }
           else {
-            this.$('[data-se="u2f-waiting"]').hide();
+            var errorMessageKey = 'u2f.error.factorNotSupported';
+            if (this.options.appState.get('factors').length === 1) {
+              errorMessageKey = 'u2f.error.factorNotSupported.oneFactor';
+            }
+            children.push(FormType.View(
+              {View: new HtmlErrorMessageView({message: Okta.loc(errorMessageKey, 'login')})},
+              {selector: '.o-form-error-container'}
+            ));
           }
-        }, this));
-      },
 
-      _startEnrollment: function () {
-        this.$('.okta-waiting-spinner').show();
-        this.$('.o-form-button-bar').hide();
-      },
+          if (this.options.appState.get('allowRememberDevice')) {
+            children.push(FormType.Input({
+              label: false,
+              'label-top': true,
+              placeholder: this.options.appState.get('rememberDeviceLabel'),
+              className: 'margin-btm-0',
+              name: 'rememberDevice',
+              type: 'checkbox'
+            }));
+          }
 
-      _stopEnrollment: function () {
-        this.$('.okta-waiting-spinner').hide();
-        this.$('.o-form-button-bar').show();
-      }
+          return children;
+        },
+
+        postRender: function () {
+          _.defer(_.bind(function () {
+            if (webauthn.isWebauthnOrU2fAvailable()) {
+              this.model.save();
+            }
+            else {
+              this.$('[data-se="u2f-waiting"]').hide();
+            }
+          }, this));
+        },
+
+        _startEnrollment: function () {
+          this.$('.okta-waiting-spinner').show();
+          this.$('.o-form-button-bar').hide();
+        },
+
+        _stopEnrollment: function () {
+          this.$('.okta-waiting-spinner').hide();
+          this.$('.o-form-button-bar').show();
+        },
+      };
     },
 
     back: function () {
