@@ -55,6 +55,7 @@ function (Okta, Errors, FormController, FormType, CryptoUtil, FidoUtil,
           });
 
           var self = this;
+          var isPlatform = factor.profile && factor.profile.osType;
           return factor.verify().then(function (transaction) {
             self.trigger('request');
             if (webauthn.isNewApiAvailable()) {
@@ -66,6 +67,11 @@ function (Okta, Errors, FormController, FormType, CryptoUtil, FidoUtil,
                 }],
                 challenge: CryptoUtil.strToBin(transaction.factor.challenge.challenge)
               });
+
+              if (isPlatform) {
+                var obj = options.allowCredentials[0];
+                obj.transports = ['internal'];
+              }
 
               return new Q(navigator.credentials.get({publicKey: options}))
                 .then(function (assertion) {
